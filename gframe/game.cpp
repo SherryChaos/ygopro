@@ -79,7 +79,7 @@ void Game::MainServerLoop() {
 	deckManager.LoadLFList();
 	dataManager.LoadDB(L"cards.cdb");
 	LoadExpansions();
-#ifdef SERVER_PRO2_SUPPORT
+#if defined SERVER_PRO2_SUPPORT || defined SERVER_PRO3_SUPPORT
 	dataManager.FileSystem->addFileArchive("data/script.zip", true, false, EFAT_ZIP);
 #endif
 
@@ -1190,6 +1190,15 @@ void Game::LoadExpansions() {
 		}
 	});
 #endif // SERVER_PRO2_SUPPORT
+#ifdef SERVER_PRO3_SUPPORT
+	FileSystem::TraversalDir(L"./Data/locales/zh-CN", [](const wchar_t* name, bool isdir) {
+		wchar_t fpath[1024];
+		myswprintf(fpath, L"./Data/locales/zh-CN/%ls", name);
+		if (!isdir && wcsrchr(name, '.') && !mywcsncasecmp(wcsrchr(name, '.'), L".cdb", 4)) {
+			dataManager.LoadDB(fpath);
+		}
+		});
+#endif // SERVER_PRO3_SUPPORT
 	FileSystem::TraversalDir(L"./expansions", [](const wchar_t* name, bool isdir) {
 		wchar_t fpath[1024];
 		myswprintf(fpath, L"./expansions/%ls", name);
