@@ -84,6 +84,8 @@ void Game::MainServerLoop() {
 	LoadExpansions();
 #ifdef SERVER_PRO2_SUPPORT
 	DataManager::FileSystem->addFileArchive("data/script.zip", true, false, irr::io::EFAT_ZIP);
+#elif defined SERVER_PRO3_SUPPORT
+	DataManager::FileSystem->addFileArchive("Data/script.zip", true, false, irr::io::EFAT_ZIP);
 #endif
 
 	server_port = NetServer::StartServer(server_port);
@@ -1186,6 +1188,17 @@ void Game::LoadExpansions() {
 		}
 	});
 #endif // SERVER_PRO2_SUPPORT
+#ifdef SERVER_PRO3_SUPPORT
+	FileSystem::TraversalDir(L"./Data/locales/zh-CN", [](const wchar_t* name, bool isdir) {
+		if (isdir)
+			return;
+		wchar_t fpath[1024];
+		myswprintf(fpath, L"./Data/locales/zh-CN/%ls", name);
+		if (IsExtension(name, L".cdb")) {
+			dataManager.LoadDB(fpath);
+		}
+	});
+#endif // SERVER_PRO3_SUPPORT
 	FileSystem::TraversalDir(L"./expansions", [](const wchar_t* name, bool isdir) {
 		if (isdir)
 			return;
