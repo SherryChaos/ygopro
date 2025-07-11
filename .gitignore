@@ -43,3 +43,4 @@ obj/
 /premake5.exe
 
 !/build/
+.DS_Store
