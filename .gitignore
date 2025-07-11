@@ -26,8 +26,8 @@
 /irrKlang.dll
 
 /bin
-/build
-/obj
+build/
+obj/
 /event
 /freetype
 /irrlicht

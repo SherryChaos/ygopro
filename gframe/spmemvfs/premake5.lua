@@ -3,9 +3,7 @@ project "cspmemvfs"
     cdialect "C11"
     files { "*.c", "*.h" }
 
-    if BUILD_SQLITE then
-        includedirs { "../../sqlite3" }
-    end
+    includedirs { "../../sqlite3" }
 
     filter "not action:vs*"
     defines { "_POSIX_C_SOURCE=200809L" }

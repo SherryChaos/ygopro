@@ -189,7 +189,7 @@ void DataManager::ReadStringConfLine(const char* linebuf) {
 }
 #endif //YGOPRO_SERVER_MODE
 bool DataManager::Error(sqlite3* pDB, sqlite3_stmt* pStmt) {
-	std::snprintf(errmsg, sizeof errmsg, "%s", sqlite3_errmsg(pDB));
+	snprintf(errmsg, sizeof errmsg, "%s", sqlite3_errmsg(pDB));
 	if(pStmt)
 		sqlite3_finalize(pStmt);
 	return false;
@@ -421,10 +421,10 @@ unsigned char* DataManager::ScriptReaderEx(const char* script_path, int* slen) {
 		return ReadScriptFromFile(script_path, slen);
 	const char* script_name = script_path + 2;
 	char expansions_path[1024]{};
-	std::snprintf(expansions_path, sizeof expansions_path, "./expansions/%s", script_name);
+	snprintf(expansions_path, sizeof expansions_path, "./expansions/%s", script_name);
 #ifdef YGOPRO_SERVER_MODE
 	char special_path[1024]{};
-	std::snprintf(special_path, sizeof special_path, "./specials/%s", script_path + 9);
+	snprintf(special_path, sizeof special_path, "./specials/%s", script_path + 9);
 	if (ReadScriptFromFile(special_path, slen))
 		return scriptBuffer;
 	if (ReadScriptFromFile(expansions_path, slen)) // always read expansions first

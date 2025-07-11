@@ -5,7 +5,10 @@ workspace "YGO Classes"
     platforms { "x86_64" }
     configurations { "Debug", "Release" }
 
-    defines { "LINUX", "__linux__", "BUILD_LUA" }
+    BUILD_LUA = true
+    BUILD_SQLITE = true
+
+    defines { "LINUX", "__linux__" }
     include "../../lua"
     include "../../event"
     include "../../sqlite3"

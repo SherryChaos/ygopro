@@ -5,7 +5,10 @@ workspace "YGO Classes"
     platforms { "macosx" }
     configurations { "Debug", "Release" }
 
-    defines { "BUILD_LUA", "_CRT_SECURE_NO_WARNINGS"}
+    BUILD_LUA = true
+    BUILD_SQLITE = true
+
+    defines { "_CRT_SECURE_NO_WARNINGS"}
     include "../../lua"
     include "../../event"
     include "../../sqlite3"
