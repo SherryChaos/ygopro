@@ -3,6 +3,10 @@
 /deck
 
 /data
+
+.DS_Store
+
+/deck
 /expansions
 /fonts
 /icon
@@ -25,9 +29,10 @@
 /ikpMP3.dll
 /irrKlang.dll
 
-/bin
-build/
-obj/
+/.vscode/
+/bin/
+/build
+/obj/
 /event
 /freetype
 /irrlicht
@@ -41,6 +46,3 @@ obj/
 /gframe/ygopro.aps
 /premake5
 /premake5.exe
-
-!/build/
-.DS_Store
