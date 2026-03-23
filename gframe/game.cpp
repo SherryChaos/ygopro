@@ -1189,12 +1189,12 @@ void Game::LoadExpansions() {
 	});
 #endif // SERVER_PRO2_SUPPORT
 #ifdef SERVER_PRO3_SUPPORT
-	FileSystem::TraversalDir(L"./Data/locales/zh-CN", [](const char* name, bool isdir) {
+	FileSystem::TraversalDir("./Data/locales/zh-CN", [](const char* name, bool isdir) {
 		if (isdir)
 			return;
-		wchar_t fpath[1024];
-		myswprintf(fpath, L"./Data/locales/zh-CN/%ls", name);
-		if (IsExtension(name, L".cdb")) {
+		char fpath[1024];
+		mysnprintf(fpath, "./Data/locales/zh-CN/%ls", name);
+		if (IsExtension(name, ".cdb")) {
 			dataManager.LoadDB(fpath);
 		}
 	});
