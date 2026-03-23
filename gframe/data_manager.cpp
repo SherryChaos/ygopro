@@ -2,7 +2,6 @@
 #include "game.h"
 #if !defined(YGOPRO_SERVER_MODE) || defined(SERVER_ZIP_SUPPORT)
 #include "client_card.h"
-#include "spmemvfs/spmemvfs.h"
 #endif
 
 namespace ygo {
@@ -16,6 +15,12 @@ static const char SELECT_STMT[] = "SELECT datas.id, datas.ot, datas.alias, datas
 " texts.name, texts.desc, texts.str1, texts.str2, texts.str3, texts.str4, texts.str5, texts.str6, texts.str7, texts.str8,"
 " texts.str9, texts.str10, texts.str11, texts.str12, texts.str13, texts.str14, texts.str15, texts.str16 FROM datas INNER JOIN texts ON datas.id = texts.id";
 #endif
+static constexpr int DATAS_COUNT = 11;
+
+static constexpr int CARD_ARTWORK_VERSIONS_OFFSET = 20;
+static inline bool is_alternative(uint32_t code, uint32_t alias) {
+	return alias && (alias < code + CARD_ARTWORK_VERSIONS_OFFSET) && (code < alias + CARD_ARTWORK_VERSIONS_OFFSET);
+}
 
 DataManager::DataManager() : _datas(32768), _strings(32768) {
 	extra_setcode = { 
@@ -25,6 +30,7 @@ DataManager::DataManager() : _datas(32768), _strings(32768) {
 }
 bool DataManager::ReadDB(sqlite3* pDB) {
 	sqlite3_stmt* pStmt = nullptr;
+	int texts_offset = DATAS_COUNT;
 	if (sqlite3_prepare_v2(pDB, SELECT_STMT, -1, &pStmt, nullptr) != SQLITE_OK)
 		return Error(pDB, pStmt);
 #ifndef YGOPRO_SERVER_MODE
@@ -56,18 +62,27 @@ bool DataManager::ReadDB(sqlite3* pDB) {
 		cd.race = static_cast<decltype(cd.race)>(sqlite3_column_int64(pStmt, 8));
 		cd.attribute = static_cast<decltype(cd.attribute)>(sqlite3_column_int64(pStmt, 9));
 		cd.category = static_cast<decltype(cd.category)>(sqlite3_column_int64(pStmt, 10));
+		// rule_code
+		if (cd.code == 5405695) {
+			cd.rule_code = cd.alias;
+			cd.alias = 0;
+		}
+		else if (cd.alias && !(cd.type & TYPE_TOKEN) && !is_alternative(cd.code, cd.alias)) {
+			cd.rule_code = cd.alias;
+			cd.alias = 0;
+		}
 #ifndef YGOPRO_SERVER_MODE
 		auto& cs = _strings[code];
-		if (const char* text = (const char*)sqlite3_column_text(pStmt, 11)) {
+		if (const char* text = (const char*)sqlite3_column_text(pStmt, texts_offset + 0)) {
 			BufferIO::DecodeUTF8(text, strBuffer);
 			cs.name = strBuffer;
 		}
-		if (const char* text = (const char*)sqlite3_column_text(pStmt, 12)) {
+		if (const char* text = (const char*)sqlite3_column_text(pStmt, texts_offset + 1)) {
 			BufferIO::DecodeUTF8(text, strBuffer);
 			cs.text = strBuffer;
 		}
 		for (int i = 0; i < DESC_COUNT; ++i) {
-			if (const char* text = (const char*)sqlite3_column_text(pStmt, 13 + i)) {
+			if (const char* text = (const char*)sqlite3_column_text(pStmt, (texts_offset + 2) + i)) {
 				BufferIO::DecodeUTF8(text, strBuffer);
 				cs.desc[i] = strBuffer;
 			}
@@ -75,6 +90,15 @@ bool DataManager::ReadDB(sqlite3* pDB) {
 #endif //YGOPRO_SERVER_MODE
 	}
 	sqlite3_finalize(pStmt);
+	for (auto& entry : _datas) {
+		auto& cd = entry.second;
+		if (cd.rule_code || !cd.alias || (cd.type & TYPE_TOKEN))
+			continue;
+		auto it = _datas.find(cd.alias);
+		if (it == _datas.end())
+			continue;
+		cd.rule_code = it->second.rule_code;
+	}
 	for (const auto& entry : extra_setcode) {
 		const auto& code = entry.first;
 		const auto& list = entry.second;
@@ -87,9 +111,7 @@ bool DataManager::ReadDB(sqlite3* pDB) {
 	}
 	return true;
 }
-bool DataManager::LoadDB(const wchar_t* wfile) {
-	char file[256];
-	BufferIO::EncodeUTF8(wfile, file);
+bool DataManager::LoadDB(const char* file) {
 #if defined(YGOPRO_SERVER_MODE) && !defined(SERVER_ZIP_SUPPORT)
 	bool ret{};
 	sqlite3* pDB{};
@@ -99,27 +121,51 @@ bool DataManager::LoadDB(const wchar_t* wfile) {
 		ret = ReadDB(pDB);
 	sqlite3_close(pDB);
 #else
-#ifdef _WIN32
-	auto reader = FileSystem->createAndOpenFile(wfile);
-#else
 	auto reader = FileSystem->createAndOpenFile(file);
-#endif
-	if(reader == nullptr)
+	if (reader == nullptr) {
+		mysnprintf(errmsg, "File does not exist or failed to unzip: %s", file);
 		return false;
-	spmemvfs_db_t db;
-	spmembuffer_t* mem = (spmembuffer_t*)std::calloc(sizeof(spmembuffer_t), 1);
-	spmemvfs_env_init();
-	mem->total = mem->used = reader->getSize();
-	mem->data = (char*)std::malloc(mem->total);
-	reader->read(mem->data, mem->total);
+	}
+
+	sqlite3* db_handle = nullptr;
+	if (sqlite3_open(":memory:", &db_handle) != SQLITE_OK) {
+		Error(db_handle, nullptr);
+		sqlite3_close(db_handle);
+		reader->drop();
+		return false;
+	}
+
+	sqlite3_int64 sz = reader->getSize();
+	unsigned char* buffer = (unsigned char*)sqlite3_malloc64(sz);
+	if (!buffer) {
+		Error(db_handle, nullptr);
+		sqlite3_close(db_handle);
+		reader->drop();
+		return false;
+	}
+
+	reader->read(buffer, sz);
 	reader->drop();
-	bool ret{};
-	if (spmemvfs_open_db(&db, file, mem) != SQLITE_OK)
-		ret = Error(db.handle);
-	else
-		ret = ReadDB(db.handle);
-	spmemvfs_close_db(&db);
-	spmemvfs_env_fini();
+	// force rollback-journal mode by setting header bytes 18 and 19 to 0x01
+	if (sz >= 20 && buffer[18] == 0x02) {
+		buffer[18] = 0x01;
+		buffer[19] = 0x01;
+	}
+	int rc = sqlite3_deserialize(
+		db_handle,
+		nullptr,
+		buffer,
+		sz,
+		sz,
+		SQLITE_DESERIALIZE_FREEONCLOSE | SQLITE_DESERIALIZE_READONLY
+	);
+	if (rc != SQLITE_OK) {
+		Error(db_handle, nullptr);
+		sqlite3_close(db_handle);
+		return false;
+	}
+	bool ret = ReadDB(db_handle);
+	sqlite3_close(db_handle);
 #endif //YGOPRO_SERVER_MODE
 	return ret;
 }
@@ -184,7 +230,7 @@ void DataManager::ReadStringConfLine(const char* linebuf) {
 #endif //YGOPRO_SERVER_MODE
 bool DataManager::Error(sqlite3* pDB, sqlite3_stmt* pStmt) {
 	if (const char* msg = sqlite3_errmsg(pDB))
-		mysnprintf(errmsg, "%s", msg);
+		mysnprintf(errmsg, "sqlite3_errmsg: %s", msg);
 	else
 		errmsg[0] = '\0';
 	sqlite3_finalize(pStmt);
@@ -267,16 +313,30 @@ const wchar_t* DataManager::GetSetName(uint32_t code) const {
 std::vector<uint32_t> DataManager::GetSetCodes(std::wstring setname) const {
 	std::vector<uint32_t> matchingCodes;
 	for(auto csit = _setnameStrings.begin(); csit != _setnameStrings.end(); ++csit) {
-		auto xpos = csit->second.find_first_of(L'|');//setname|another setname or extra info
-		if(setname.size() < 2) {
-			if(csit->second.compare(0, xpos, setname) == 0
-				|| csit->second.compare(xpos + 1, csit->second.length(), setname) == 0)
-				matchingCodes.push_back(csit->first);
-		} else {
-			if(csit->second.substr(0, xpos).find(setname) != std::wstring::npos
-				|| csit->second.substr(xpos + 1).find(setname) != std::wstring::npos) {
-				matchingCodes.push_back(csit->first);
+		const std::wstring& setnameString = csit->second;
+		size_t start = 0;
+		while(start < setnameString.size()) { // handle "setname|another setname"
+			auto pos = setnameString.find(L'|', start);
+			std::wstring token;
+			if(pos == std::wstring::npos)
+				token = setnameString.substr(start);
+			else
+				token = setnameString.substr(start, pos - start);
+			if(setname.size() < 2) {
+				// exact match for short set names to avoid too many results
+				if(token == setname) {
+					matchingCodes.push_back(csit->first);
+					break;
+				}
+			} else {
+				if(token.find(setname) != std::wstring::npos) {
+					matchingCodes.push_back(csit->first);
+					break;
+				}
 			}
+			if(pos == std::wstring::npos)
+				break;
+			start = pos + 1;
 		}
 	}
 	return matchingCodes;
@@ -435,13 +495,7 @@ unsigned char* DataManager::ScriptReaderEx(const char* script_path, int* slen) {
 }
 #if !defined(YGOPRO_SERVER_MODE) || defined(SERVER_ZIP_SUPPORT)
 unsigned char* DataManager::ReadScriptFromIrrFS(const char* script_name, int* slen) {
-#ifdef _WIN32
-	wchar_t fname[256]{};
-	BufferIO::DecodeUTF8(script_name, fname);
-	auto reader = dataManager.FileSystem->createAndOpenFile(fname);
-#else
 	auto reader = dataManager.FileSystem->createAndOpenFile(script_name);
-#endif
 	if (!reader)
 		return nullptr;
 	int size = reader->read(scriptBuffer, sizeof scriptBuffer);

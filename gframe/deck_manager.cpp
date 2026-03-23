@@ -111,7 +111,7 @@ unsigned int DeckManager::CheckDeck(const Deck& deck, unsigned int lfhash, int r
 			return (gameruleDeckError << 28) | cit->first;
 		if (cit->second.type & (TYPES_EXTRA_DECK | TYPE_TOKEN))
 			return (DECKERROR_MAINCOUNT << 28);
-		int code = cit->second.alias ? cit->second.alias : cit->first;
+		auto code = cit->second.get_duel_code();
 		ccount[code]++;
 		int dc = ccount[code];
 		if(dc > 3)
@@ -126,7 +126,7 @@ unsigned int DeckManager::CheckDeck(const Deck& deck, unsigned int lfhash, int r
 			return (gameruleDeckError << 28) | cit->first;
 		if (!(cit->second.type & TYPES_EXTRA_DECK) || cit->second.type & TYPE_TOKEN)
 			return (DECKERROR_EXTRACOUNT << 28);
-		int code = cit->second.alias ? cit->second.alias : cit->first;
+		auto code = cit->second.get_duel_code();
 		ccount[code]++;
 		int dc = ccount[code];
 		if(dc > 3)
@@ -141,7 +141,7 @@ unsigned int DeckManager::CheckDeck(const Deck& deck, unsigned int lfhash, int r
 			return (gameruleDeckError << 28) | cit->first;
 		if (cit->second.type & TYPE_TOKEN)
 			return (DECKERROR_SIDECOUNT << 28);
-		int code = cit->second.alias ? cit->second.alias : cit->first;
+		auto code = cit->second.get_duel_code();
 		ccount[code]++;
 		int dc = ccount[code];
 		if(dc > 3)
@@ -289,13 +289,9 @@ FILE* DeckManager::OpenDeckFile(const wchar_t* file, const char* mode) {
 	return fp;
 }
 irr::io::IReadFile* DeckManager::OpenDeckReader(const wchar_t* file) {
-#ifdef _WIN32
-	auto reader = dataManager.FileSystem->createAndOpenFile(file);
-#else
 	char file2[256];
 	BufferIO::EncodeUTF8(file, file2);
 	auto reader = dataManager.FileSystem->createAndOpenFile(file2);
-#endif
 	return reader;
 }
 bool DeckManager::LoadCurrentDeck(std::istringstream& deckStream, bool is_packlist) {
@@ -320,7 +316,6 @@ bool DeckManager::LoadCurrentDeck(const wchar_t* file, bool is_packlist) {
 	}
 	if(!reader)
 		return false;
-	std::memset(deckBuffer, 0, sizeof deckBuffer);
 	int size = reader->read(deckBuffer, sizeof deckBuffer);
 	reader->drop();
 	if (size >= (int)sizeof deckBuffer) {
