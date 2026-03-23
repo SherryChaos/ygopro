@@ -54,7 +54,7 @@ void DeckManager::LoadLFList() {
 	LoadLFListSingle("config/lflist.conf");
 #endif
 #ifdef SERVER_PRO3_SUPPORT
-	LoadLFListSingle("Data/lflist.conf");
+	LoadLFListSingle("Data/lflist_merged.conf");
 #endif
 	LoadLFListSingle("expansions/lflist.conf");
 	LoadLFListSingle("lflist.conf");
